@@ -1,0 +1,35 @@
+rowNumber,timestamp,handle,productTitle,field,original,updated,reason,severity,phase
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Vendor,Bastelschachtel,,"Vendor set to Bastelschachtel, but product does not seem to be handmade. Please verify.",warn,2
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,SEO Title (suggested),Pinselset 6 teilig,Spitzige Pinsel Set 6teilig,Preview only (Validate Mode),info,3c
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,SEO Description (suggested),"6 Pinsel mit rundem Kopf, zum Malen und Zeichnen.",Entdecken Sie unsere vielfältige Produktpalette für all Ihre kreativen Bedürfnisse. Entdecken Sie das Produkt 'Spitzige Pinsel Set,Preview only (Validate Mode),info,3c
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,farbsetsfurrost-undpatinaeffekt,farbsetsfurrost-undpatinaeffekt,Tag 'farbsetsfurrost-undpatinaeffekt' exceeds recommended length of 16 characters,warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,hibiskusblutenvonlisaz,hibiskusblutenvonlisaz,Tag 'hibiskusblutenvonlisaz' exceeds recommended length of 16 characters,warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,zubehorundwerkzeug,zubehorundwerkzeug,Tag 'zubehorundwerkzeug' exceeds recommended length of 16 characters,warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,acrylfarben,acrylfarben,Tag 'acrylfarben' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,bastelbedarf,bastelbedarf,Tag 'bastelbedarf' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,bastelfarben,bastelfarben,Tag 'bastelfarben' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,farben,farben,Tag 'farben' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,farbsetsfurrost-undpatinaeffekt,farbsetsfurrost-undpatinaeffekt,Tag 'farbsetsfurrost-undpatinaeffekt' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,hibiskusblutenvonlisaz,hibiskusblutenvonlisaz,Tag 'hibiskusblutenvonlisaz' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,lasur,lasur,Tag 'lasur' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,malen,malen,Tag 'malen' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,pinsel,pinsel,Tag 'pinsel' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,set,set,Tag 'set' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,wasserverdunnbar,wasserverdunnbar,Tag 'wasserverdunnbar' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,zubehorundwerkzeug,zubehorundwerkzeug,Tag 'zubehorundwerkzeug' does not align with product category 'uncategorized',warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,"acrylfarben,bastelbedarf,bastelfarben,farben,farbsetsfurrost-undpatinaeffekt,hibiskusblutenvonlisaz,lasur,malen,pinsel,set,wasserverdunnbar,zubehorundwerkzeug","acrylfarben,bastelbedarf,bastelfarben,farben,farbsetsfurrost-undpatinaeffekt,hibiskusblutenvonlisaz,lasur,malen,pinsel,set,wasserverdunnbar,zubehorundwerkzeug",Tag count (12) is outside the recommended range of 5-10,warn,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Tags,"acrylfarben, bastelbedarf, bastelfarben, farben, Farbsets für Rost- und Patinaeffekt, Hibiskusblüten von Lisa Z., lasur, malen, pinsel, set, wasserverdünnbar, Zubehör und Werkzeug","acrylfarben,bastelbedarf,bastelfarben,farben,farbsetsfurrost-undpatinaeffekt,hibiskusblutenvonlisaz,lasur,malen,pinsel,set,wasserverdunnbar,zubehorundwerkzeug","Tags normalized, duplicates/banned terms removed, and validated",info,3e
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Google Shopping / Google Product Category,,,Missing google category (no map entry for Product Category: Uncategorized),warn,4
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Google Shopping / Condition,,new,Condition set to new,info,4
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,SEO Description,,,SEO desc length 49,warn,4
+2,02/10/2025,spitzige-pinsel-set-6teilig-818,Spitzige Pinsel Set 6teilig,Google Shopping / Google Product Category,,,Missing google category for product category: Uncategorized,warn,4
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,Product Category,,Allgemein,Default category assigned,info,2
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,Variant SKU,,BA-PRD-28PB,Generated per SOP,info,3d
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,Variant Requires Shipping,,TRUE,Physical product default,info,3d
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,Variant Taxable,,TRUE,Taxable default,info,3d
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,Tags,,,Tag count (0) is outside the recommended range of 5-10,warn,3e
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,Google Shopping / Google Product Category,,,Missing google category (no map entry for Product Category: Allgemein),warn,4
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,Google Shopping / Condition,,new,Condition set to new,info,4
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,SEO Description,,,SEO desc length 0,warn,4
+3,02/10/2025,spitzige-pinsel-set-6teilig-818,,Google Shopping / Google Product Category,,,Missing google category for product category: Allgemein,warn,4
+4,02/10/2025,pentart-acrylfarbe-matt-50ml-schwarz-3317,Pentart Acrylfarbe matt 50ml - schwarz,Product Category,,Allgemein,Default category assigned,info,2
