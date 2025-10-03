@@ -4,6 +4,96 @@ const LIMITS = { TITLE:70, SEO_TITLE:60, SEO_DESC_MIN:155, SEO_DESC_MAX:160 };
 const IMMUTABLES = new Set(['Handle','Image Src','Variant Image','ID','Variant ID']);
 const SKU_RE = /^[A-Z0-9_-]{2,16}$/;
 
+/** PHASE 1: Critical loadConfig function - loads all JSON configs from Config sheet */
+function loadConfig(shCfg) {
+  const range = shCfg.getDataRange().getValues();
+  const CFG = {};
+  
+  console.log(`Loading config from ${range.length} rows in Config sheet`);
+  
+  for (let i = 0; i < range.length; i++) {
+    const key = String(range[i][0] || '').trim();
+    const value = String(range[i][1] || '').trim();
+    
+    if (!key || !value) {
+      console.log(`Skipping row ${i+1}: empty key or value`);
+      continue;
+    }
+    
+    console.log(`Processing config key: "${key}"`);
+    
+    try {
+      let parsedValue = JSON.parse(value);
+      
+      // Map specific config keys to CFG object properties
+      switch (key) {
+        case 'banned_terms_json':
+        case 'banned_terms':
+          CFG.BANNED_TERMS = parsedValue.banned_terms || parsedValue;
+          break;
+        case 'category_alignment_json':
+        case 'category_alignment':
+          CFG.CAT_ALIGN = parsedValue.categories || parsedValue;
+          break;
+        case 'keyword_dictionary_json':
+        case 'keyword_dictionary':
+          CFG.KEYWORDS = parsedValue.dictionary || parsedValue;
+          break;
+        case 'collection_aliases_json':
+        case 'collection_aliases':
+          CFG.COLLECTION_ALIASES = parsedValue.aliases || parsedValue;
+          break;
+        case 'collection_seo_descriptions_json':
+        case 'collection_seo_descriptions':
+          CFG.COLLECTION_SEO = parsedValue;
+          break;
+        case 'sop_phase3_rules_json':
+        case 'sop_phase3_rules':
+          CFG.SOP_RULES = parsedValue;
+          break;
+        case 'known_vendors_json':
+        case 'known_vendors':
+          CFG.KNOWN_VENDORS = parsedValue;
+          break;
+        case 'google_taxonomy_map_json':
+        case 'google_taxonomy_map':
+          CFG.GOOGLE_TAX_MAP = parsedValue;
+          break;
+        case 'tag_relevance_map_json':
+        case 'tag_relevance_map':
+          CFG.TAG_RELEVANCE_MAP = parsedValue;
+          break;
+        case 'seo_template_json':
+        case 'seo_template':
+          CFG.SEO_TEMPLATE = parsedValue;
+          break;
+        case 'category_keywords_inference_json':
+        case 'category_keywords_inference':
+          CFG.CATEGORY_KEYWORDS_INFERENCE = parsedValue;
+          break;
+        // Phase 2 preparation
+        case 'structural_tags_json':
+        case 'structural_tags':
+          CFG.STRUCTURAL_TAGS = parsedValue;
+          break;
+        case 'tag_generation_rules_json':
+        case 'tag_generation_rules':
+          CFG.TAG_GENERATION_RULES = parsedValue;
+          break;
+        default:
+          CFG[key] = parsedValue;
+      }
+    } catch (error) {
+      console.log(`Failed to parse config key "${key}": ${error.message}`);
+      console.log(`JSON content preview: ${value.substring(0, 100)}...`);
+      throw new Error(`Failed to parse config key "${key}": ${error.message}. JSON content: ${value}`);
+    }
+  }
+  
+  console.log('Final CFG object keys:', Object.keys(CFG));
+  return CFG;
+}
+
 // --- Helper to show messages ---
 function notify(msg, title, seconds) {
   SpreadsheetApp.getActiveSpreadsheet().toast(
@@ -11,6 +101,180 @@ function notify(msg, title, seconds) {
     title || 'Product Cleanup',
     seconds || 3
   );
+}
+
+// --- Helper: ensure sheet exists or throw error ---
+function mustSheet(spreadsheet, sheetName) {
+  const sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    throw new Error(`Missing required sheet: "${sheetName}". Please run "Setup Sheets & Config" first.`);
+  }
+  return sheet;
+}
+
+// --- Helper: escape special regex characters ---
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// --- Helper: strip HTML tags from string ---
+function stripHtml(html) {
+  if (!html) return '';
+  return String(html).replace(/<[^>]*>/g, '').trim();
+}
+
+// --- Helper: validate row data and add validation issues ---
+function validateRow(row, issues, rowNumber, productTitle, ctx, CFG) {
+  // Basic validations can be added here
+  // For now, this is a placeholder to prevent the "not defined" error
+  return;
+}
+
+// --- Helper: Re-validate tags with updated category from Phase 4 ---
+function revalidateTagsWithUpdatedCategory(row, issues, rowNumber, productTitle, ctx, CFG) {
+  const tags = (row['Tags'] || '').split(',').map(tag => tag.trim()).filter(Boolean);
+  const productCategory = (row['Product Category'] || '').toLowerCase();
+  
+  // Only proceed if we have a meaningful category (not "uncategorized")
+  if (!productCategory || productCategory === 'uncategorized' || productCategory === 'allgemein') {
+    return; // Skip validation if category is still not properly assigned
+  }
+  
+  // Check category alignment with updated category
+  const categoryKeywords = new Set();
+  if (CFG.KEYWORDS && CFG.KEYWORDS[productCategory]) {
+    const catData = CFG.KEYWORDS[productCategory];
+    ['primary', 'secondary', 'attributes'].forEach(type => {
+      if (catData[type]) {
+        catData[type].forEach(keyword => {
+          categoryKeywords.add(keyword.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]/g, ''));
+        });
+      }
+    });
+  }
+  
+  // Re-validate each tag against the updated category
+  for (const tag of tags) {
+    if (categoryKeywords.size > 0 && !categoryKeywords.has(tag)) {
+      // Only warn if tag clearly doesn't align with updated category
+      const isGenericCraftTerm = ['basteln', 'kreativ', 'diy', 'hobby', 'handwerk'].includes(tag);
+      if (!isGenericCraftTerm) {
+        pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Tags', tag, tag, `Tag '${tag}' may not align with updated product category '${row['Product Category']}'`, 'info', ctx.phase);
+      }
+    }
+  }
+}
+
+// --- Helper: read sheet data as table with headers ---
+function readTable(sheet) {
+  const data = sheet.getDataRange().getValues();
+  if (data.length === 0) return { headers: [], rows: [] };
+  
+  const headers = data[0];
+  const rows = data.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((header, index) => {
+      obj[header] = row[index];
+    });
+    return obj;
+  });
+  
+  return { headers, rows };
+}
+
+// --- Helper: write table data to sheet ---
+function writeTable(sheet, headers, rows) {
+  sheet.clear();
+  if (rows.length === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+  
+  const data = [headers];
+  rows.forEach(row => {
+    const rowData = headers.map(header => row[header] || '');
+    data.push(rowData);
+  });
+  
+  sheet.getRange(1, 1, data.length, headers.length).setValues(data);
+  
+  // Auto-resize columns for better readability
+  for (let col = 1; col <= headers.length; col++) {
+    sheet.autoResizeColumn(col);
+    
+    // Limit extremely wide columns for practical viewing
+    const currentWidth = sheet.getColumnWidth(col);
+    if (currentWidth > 400) {
+      sheet.setColumnWidth(col, 400);
+    }
+    if (currentWidth < 80) {
+      sheet.setColumnWidth(col, 80);
+    }
+  }
+}
+
+// --- Helper: write issues to Issues sheet ---
+function writeIssues(sheet, issues) {
+  sheet.clear();
+  
+  if (issues.length === 0) {
+    sheet.getRange(1, 1, 1, 9).setValues([['Row', 'Timestamp', 'Handle', 'Product Title', 'Field', 'Original', 'Updated', 'Reason', 'Severity', 'Phase']]);
+    return;
+  }
+  
+  const headers = ['Row', 'Timestamp', 'Handle', 'Product Title', 'Field', 'Original', 'Updated', 'Reason', 'Severity', 'Phase'];
+  const data = [headers];
+  
+  issues.forEach(issue => {
+    data.push([
+      issue.rowNumber,
+      issue.timestamp,
+      issue.handle,
+      issue.productTitle,
+      issue.field,
+      issue.original,
+      issue.updated,
+      issue.reason,
+      issue.severity,
+      issue.phase
+    ]);
+  });
+  
+  sheet.getRange(1, 1, data.length, headers.length).setValues(data);
+  
+  // Format headers
+  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#e8f0fe');
+  
+  // Enhanced auto-resize: Resize each column individually for better fit
+  for (let col = 1; col <= headers.length; col++) {
+    sheet.autoResizeColumn(col);
+    
+    // Set maximum widths for specific columns to prevent excessive width
+    const currentWidth = sheet.getColumnWidth(col);
+    const maxWidths = {
+      1: 80,   // Row number
+      2: 150,  // Timestamp  
+      3: 200,  // Handle
+      4: 250,  // Product Title
+      5: 150,  // Field
+      6: 300,  // Original (can be long for HTML content)
+      7: 300,  // Updated (can be long for HTML content)
+      8: 400,  // Reason (often contains detailed explanations)
+      9: 80,   // Severity
+      10: 60   // Phase
+    };
+    
+    const maxWidth = maxWidths[col] || 200;
+    if (currentWidth > maxWidth) {
+      sheet.setColumnWidth(col, maxWidth);
+    }
+    
+    // Set minimum widths for readability
+    const minWidth = col === 1 || col === 9 || col === 10 ? 60 : 100;
+    if (currentWidth < minWidth) {
+      sheet.setColumnWidth(col, minWidth);
+    }
+  }
 }
 
 // --- Helper: collect an issue entry into the in-memory list ---
@@ -38,7 +302,9 @@ function onOpen() {
     .addItem('Setup Sheets & Config', 'setupSheetsAndConfig')
     .addItem('Test Config Load', 'testConfigLoad') 
     .addItem('Validate Config JSONs', 'validateConfigSheet')
-    .addItem('Reload Config', 'reloadConfigPreview')
+    .addItem('📊 Check Config JSON Sizes', 'validateConfigJsonSizes')
+    .addItem('🔄 Sync Local JSON to Config', 'syncLocalJsonToConfig')
+    .addItem('🧪 Test SEO Description Fix', 'testSeoDescriptionFix')
     .addSeparator()
     .addItem('Generate Summary Report', 'generateSummaryReport')
     .addItem('Clear All Outputs', 'clearAllOutputs')
@@ -65,6 +331,19 @@ function runPipeline(opts){
   try {
     notify('Loading config…', 'Product Cleanup', 3);
     const CFG = loadConfig(shCfg);
+    
+    // CRITICAL: Validate essential config sections loaded
+    if (!CFG.BANNED_TERMS) {
+      console.log('WARNING: banned_terms not loaded. Using empty fallback.');
+      CFG.BANNED_TERMS = {};
+    }
+    if (!CFG.GOOGLE_TAX_MAP) {
+      console.log('WARNING: google_taxonomy_map not loaded. Using empty fallback.');
+      CFG.GOOGLE_TAX_MAP = {};
+    }
+    
+    // Log what was actually loaded for debugging
+    console.log('Config loaded successfully with keys:', Object.keys(CFG));
 
     notify('Reading input…', 'Product Cleanup', 3);
     const {headers, rows} = readTable(shIn);
@@ -90,11 +369,14 @@ function runPipeline(opts){
       const parentRow = productRows[0]; // The first row is the parent
 
       for (let j = 0; j < productRows.length; j++) {
-        const row = {...productRows[j]}; // work copy
-        const isParent = j === 0;
-        const productTitle = row['Title'] || '';
-        const rowNumber = i + 2;
-        const ctx = { phase:'', errors:0 };
+        let productTitle = '';
+        let ctx = { phase:'', errors:0 };
+        try {
+          const row = {...productRows[j]}; // work copy
+          const isParent = j === 0;
+          productTitle = row['Title'] || '';
+          const rowNumber = i + 2;
+          ctx = { phase:'', errors:0 };
 
         // PHASE 1 — Basic validation
         ctx.phase = '1';
@@ -107,7 +389,24 @@ function runPipeline(opts){
         // PHASE 2 — Normalize & categorize
         ctx.phase = '2';
         normalizeVendor(row, issues, rowNumber, productTitle, ctx, CFG);
-        mapCollectionsAndCategory(row, issues, rowNumber, productTitle, ctx, CFG);
+        
+        // PHASE 1 FIX: Variant category inheritance (ready for Phase 2 enhancement)
+        if (isParent) {
+          // Parent products: Run category assignment (Phase 2 will enhance with dynamic scoring)
+          scoreAndAssignCategory(row, issues, rowNumber, productTitle, ctx, CFG);
+          // Store parent category for variants
+          parentRow['Product Category'] = row['Product Category'];
+        } else {
+          // Variant products: Inherit category from parent
+          if (parentRow['Product Category']) {
+            const inheritedCategory = parentRow['Product Category'];
+            row['Product Category'] = inheritedCategory;
+            pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Product Category', '', inheritedCategory, 'Inherited from parent product', 'info', ctx.phase);
+          } else {
+            // Fallback: Run category mapping for orphaned variants
+            scoreAndAssignCategory(row, issues, rowNumber, productTitle, ctx, CFG);
+          }
+        }
 
         // PHASE 3a — Title
         ctx.phase = '3a';
@@ -160,26 +459,38 @@ function runPipeline(opts){
         const vChanges = normalizeVariants(row, CFG);
         vChanges.forEach(ch => pushIssue(issues, rowNumber, handle, productTitle, ch.field, ch.original, ch.updated, ch.reason, ch.severity, ctx.phase));
 
-        // PHASE 3e — Tags
+        // PHASE 3e — Tags (Initial cleanup without category validation)
         ctx.phase = '3e';
         cleanupTags(row, issues, rowNumber, productTitle, ctx, CFG);
 
         // PHASE 4 — Validation & Google Shopping
         ctx.phase = '4';
         applyGoogleShopping(row, issues, rowNumber, productTitle, ctx, CFG);
+        
+        // PHASE 4b — Re-validate tags with updated category
+        ctx.phase = '4b';
+        revalidateTagsWithUpdatedCategory(row, issues, rowNumber, productTitle, ctx, CFG);
+        
         validateRow(row, issues, rowNumber, productTitle, ctx, CFG);
 
         // Preserve immutables explicitly
         IMMUTABLES.forEach(h => row[h] = productRows[j][h]);
 
-        cleaned.push(opts.mutate ? row : productRows[j]);
+          cleaned.push(opts.mutate ? row : productRows[j]);
 
-        // Progress
-        if ((i+1) % batchSize === 0 || i === rows.length - 1) {
-          notify(`Processed ${i+1}/${total}`, 'Product Cleanup', 3);
-          SpreadsheetApp.flush();
+          // Progress
+          if ((i+1) % batchSize === 0 || i === rows.length - 1) {
+            notify(`Processed ${i+1}/${total}`, 'Product Cleanup', 3);
+            SpreadsheetApp.flush();
+          }
+          i++;
+        } catch (rowError) {
+          // CRITICAL: Individual row error handling
+          pushIssue(issues, i + 2, handle, productTitle || 'Unknown', 'System', '', '', `Row processing failed: ${rowError.message}`, 'error', ctx?.phase || 'unknown');
+          if (ctx) ctx.errors++;
+          i++;
+          // Continue processing other rows
         }
-        i++;
       }
     } // end for
 
@@ -297,23 +608,67 @@ function mapCollectionsAndCategory(row, issues, rowNumber, productTitle, ctx, CF
     }
   }
 
-  // NEW LOGIC: Keyword-Based Category Inference
-  if (!mappedCategory) {
-    const textToAnalyze = `${(row['Title'] || '')} ${(row['Body (HTML)'] || '')}`.toLowerCase();
-    const inferenceMap = CFG.CATEGORY_KEYWORDS_INFERENCE || {};
-
-    let inferredFromKeywords = '';
-    for (const keyword in inferenceMap) {
-      if (textToAnalyze.includes(keyword.toLowerCase())) {
-        inferredFromKeywords = inferenceMap[keyword];
-        break; // Take the first match
+  // ENHANCED LOGIC: Smart Category Inference from Comprehensive Keyword Dictionary
+  if (!mappedCategory || mappedCategory === existing) {
+    const title = (row['Title'] || '').toLowerCase();
+    const description = stripHtml(row['Body (HTML)'] || '').toLowerCase();
+    const textToAnalyze = `${title} ${description}`;
+    
+    let bestCategory = '';
+    let bestScore = 0;
+    const minThreshold = 2; // Minimum keyword matches required
+    
+    // Use the comprehensive keyword dictionary for category inference
+    const keywordDict = CFG.KEYWORDS || {};
+    
+    for (const category in keywordDict) {
+      const categoryKeywords = keywordDict[category];
+      let score = 0;
+      
+      // Primary keywords (highest weight)
+      (categoryKeywords.primary || []).forEach(keyword => {
+        if (textToAnalyze.includes(keyword.toLowerCase())) {
+          score += 3;
+        }
+      });
+      
+      // Secondary keywords (medium weight)  
+      (categoryKeywords.secondary || []).forEach(keyword => {
+        if (textToAnalyze.includes(keyword.toLowerCase())) {
+          score += 2;
+        }
+      });
+      
+      // Attribute keywords (lower weight)
+      (categoryKeywords.attribute || []).forEach(keyword => {
+        if (textToAnalyze.includes(keyword.toLowerCase())) {
+          score += 1;
+        }
+      });
+      
+      if (score > bestScore && score >= minThreshold) {
+        bestScore = score;
+        bestCategory = category;
       }
     }
-
-    if (inferredFromKeywords) {
-      pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Product Category', existing, inferredFromKeywords, 'Inferred from title/description keywords', 'info', ctx.phase);
-      mappedCategory = inferredFromKeywords;
-      Logger.log(`[mapCollectionsAndCategory] Inferred Category: '${mappedCategory}' from keywords`);
+    
+    // Fallback to simple keyword inference if comprehensive matching fails
+    if (!bestCategory) {
+      const inferenceMap = CFG.CATEGORY_KEYWORDS_INFERENCE || {};
+      for (const keyword in inferenceMap) {
+        if (textToAnalyze.includes(keyword.toLowerCase())) {
+          bestCategory = inferenceMap[keyword];
+          bestScore = 1;
+          break;
+        }
+      }
+    }
+    
+    if (bestCategory) {
+      const confidence = bestScore >= 6 ? 'HIGH' : bestScore >= 4 ? 'MEDIUM' : 'LOW';
+      pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Product Category', existing, bestCategory, `Smart category inference (${confidence} confidence: ${bestScore} points)`, 'info', ctx.phase);
+      mappedCategory = bestCategory;
+      Logger.log(`[mapCollectionsAndCategory] Smart Inferred Category: '${mappedCategory}' (score: ${bestScore})`);
     }
   }
 
@@ -326,6 +681,7 @@ function mapCollectionsAndCategory(row, issues, rowNumber, productTitle, ctx, CF
   }
   row['Product Category'] = mappedCategory;
   Logger.log(`[mapCollectionsAndCategory] Final Category for ${productTitle}: '${row['Product Category']}'`);
+  return mappedCategory;
 }
 
 function cleanupTitle(orig, CFG){
@@ -800,20 +1156,25 @@ function extractRemainingUsefulContent(originalHtml, usedFirstLine) {
 }
 
 function buildSEO(origT, origD, title, cat, CFG, row) {
-    const collectionKey = Object.keys(CFG.COLLECTION_ALIASES).find(key => CFG.COLLECTION_ALIASES[key] === cat);
-    const foundationalSentence = (CFG.COLLECTION_SEO && CFG.COLLECTION_SEO[collectionKey]) || (CFG.SOP_RULES && CFG.SOP_RULES.generic_seo_description) || "Entdecken Sie unsere vielfältige Produktpalette für all Ihre kreativen Bedürfnisse.";
+    const collectionKey = Object.keys(CFG.COLLECTION_ALIASES || {}).find(key => CFG.COLLECTION_ALIASES[key] === cat);
+    // OPTIMIZED: Shorter, more specific foundational sentence for better space usage
+    const foundationalSentence = (CFG.COLLECTION_SEO && CFG.COLLECTION_SEO[collectionKey]) || 
+      (CFG.SOP_RULES && CFG.SOP_RULES.generic_seo_description) || 
+      "Hochwertige Produkte für kreative Projekte und Bastelarbeiten.";
     const qualities = extractDescriptiveQualities(title, origD, CFG.KEYWORDS);
 
     let seoDesc = foundationalSentence;
 
+    // ENHANCED: More specific product description integration
     if (qualities.length > 0) {
         const qualitiesString = qualities.slice(0, 2).join(' und ');
-        const addition = ` Das Produkt '${title}' zeichnet sich durch ${qualitiesString}e Eigenschaften aus.`;
+        const addition = ` '${title}' überzeugt durch ${qualitiesString}e Eigenschaften.`;
         if ((seoDesc + addition).length <= LIMITS.SEO_DESC_MAX) {
             seoDesc += addition;
         }
     } else {
-        const addition = ` Entdecken Sie jetzt das Produkt '${title}'.`;
+        // More direct product reference
+        const addition = ` Entdecken Sie '${title}' für Ihre Projekte.`;
         if ((seoDesc + addition).length <= LIMITS.SEO_DESC_MAX) {
             seoDesc += addition;
         }
@@ -851,14 +1212,68 @@ function buildSEO(origT, origD, title, cat, CFG, row) {
     }
 
     seoDesc = seoDesc.replace(/\s+/g, ' ').trim();
-    if (seoDesc.length > LIMITS.SEO_DESC_MAX) {
-        seoDesc = seoDesc.substring(0, LIMITS.SEO_DESC_MAX);
-        seoDesc = seoDesc.substring(0, Math.min(seoDesc.length, seoDesc.lastIndexOf(" ")));
+    
+    // CRITICAL FIX: Check minimum length BEFORE truncating
+    // PHASE 1 FIX: Enhanced fallback to ensure minimum length (155+ chars)
+    if (seoDesc.length < LIMITS.SEO_DESC_MIN) {
+        const productCategory = row['Product Category'] || '';
+        const vendor = row['Vendor'] || '';
+        const productType = row['Type'] || '';
+        
+        // Add more specific product details to reach minimum length
+        const additionalDetails = [];
+        
+        if (productCategory && !seoDesc.includes(productCategory)) {
+            additionalDetails.push(`Kategorie: ${productCategory}.`);
+        }
+        
+        if (vendor && !seoDesc.includes(vendor)) {
+            additionalDetails.push(`Von ${vendor}.`);
+        }
+        
+        if (productType && !seoDesc.includes(productType)) {
+            additionalDetails.push(`Geeignet für ${productType}.`);
+        }
+        
+        // Add details until we reach minimum length
+        for (const detail of additionalDetails) {
+            if (seoDesc.length < LIMITS.SEO_DESC_MIN && (seoDesc + ' ' + detail).length <= LIMITS.SEO_DESC_MAX) {
+                seoDesc += ' ' + detail;
+            }
+        }
+        
+        // If still too short, add generic but relevant content
+        if (seoDesc.length < LIMITS.SEO_DESC_MIN) {
+            const genericAdditions = [
+                'Hochwertige Qualität und sorgfältige Verarbeitung.',
+                'Ideal für kreative Projekte und professionelle Anwendungen.',
+                'Schnelle Lieferung und erstklassiger Kundenservice.',
+                'Perfekt für Hobby und professionelle Nutzung.'
+            ];
+            
+            for (const addition of genericAdditions) {
+                if (seoDesc.length < LIMITS.SEO_DESC_MIN && (seoDesc + ' ' + addition).length <= LIMITS.SEO_DESC_MAX) {
+                    seoDesc += ' ' + addition;
+                    break; // Only add one generic addition
+                }
+            }
+        }
+        
+        // Final fallback - ensure we have at least minimum length
+        if (seoDesc.length < LIMITS.SEO_DESC_MIN) {
+            const baseText = `${foundationalSentence} Entdecken Sie das hochwertige Produkt '${title}' für kreative Projekte und professionelle Anwendungen. Ideal für Hobby und Beruf mit erstklassiger Qualität.`;
+            seoDesc = baseText.substring(0, LIMITS.SEO_DESC_MAX);
+            // Trim to last complete word
+            const lastSpaceIndex = seoDesc.lastIndexOf(' ');
+            if (lastSpaceIndex > LIMITS.SEO_DESC_MIN - 20) {
+                seoDesc = seoDesc.substring(0, lastSpaceIndex);
+            }
+        }
     }
     
-    // Fallback to ensure minimum length
-    if (seoDesc.length < LIMITS.SEO_DESC_MIN) {
-        seoDesc = (foundationalSentence + ` Entdecken Sie das Produkt '${title}'.`).substring(0, LIMITS.SEO_DESC_MAX);
+    // MOVED: Apply truncation AFTER ensuring minimum length
+    if (seoDesc.length > LIMITS.SEO_DESC_MAX) {
+        seoDesc = seoDesc.substring(0, LIMITS.SEO_DESC_MAX);
         seoDesc = seoDesc.substring(0, Math.min(seoDesc.length, seoDesc.lastIndexOf(" ")));
     }
 
@@ -972,6 +1387,74 @@ function cleanupTags(row, issues, rowNumber, productTitle, ctx, CFG) {
   // 2. Remove duplicates
   tags = Array.from(new Set(tags));
 
+  // 2.5. ENHANCED PHASE 1: Dynamic relevance filtering based on product content
+  const productTitleLower = (row['Title'] || '').toLowerCase();
+  const productCategoryLower = (row['Product Category'] || '').toLowerCase();
+  
+  // Pre-compute product type classifications (once per product, not per tag)
+  const toolsProducts = productTitleLower.includes('pinsel') || productTitleLower.includes('brush') || 
+                       productCategoryLower.includes('brush') || productCategoryLower.includes('tool');
+  const paintProducts = productTitleLower.includes('farbe') || productTitleLower.includes('paint') || 
+                       productCategoryLower.includes('paint');
+  
+  // Static irrelevant patterns (defined once, not per tag)
+  const irrelevantPatterns = [
+    { pattern: 'hibiskus', reason: 'hibiscus flowers not relevant to craft tools' },
+    { pattern: 'lisa', reason: 'personal names not relevant for product tags' },
+    { pattern: 'bluten', reason: 'flower-related terms not relevant for tools/supplies' },
+    { pattern: 'von', reason: 'preposition indicates personal attribution' },
+    { pattern: 'tshirt', reason: 'clothing items not relevant to craft supplies' },
+    { pattern: 'flamingo', reason: 'animal themes not relevant to craft tools/supplies' },
+    { pattern: 'kleidung', reason: 'clothing terms not relevant to craft supplies' },
+    { pattern: 'shirt', reason: 'clothing items not relevant to craft supplies' },
+    { pattern: 'hose', reason: 'clothing items not relevant to craft supplies' },
+    { pattern: 'jacke', reason: 'clothing items not relevant to craft supplies' },
+    { pattern: 'mit', reason: 'German preposition indicates composite irrelevant tags' }
+  ];
+  
+  let tagsAfterRelevanceCheck = [];
+  for (const tag of tags) {
+    let isRelevant = true;
+    let relevanceReason = '';
+    
+    // Quick length check first (fastest filter)
+    if (tag.length > 20) {
+      isRelevant = false;
+      relevanceReason = 'tag too long (>20 chars) likely compound irrelevant term';
+    }
+    
+    // Pattern matching (optimized with early break)
+    if (isRelevant) {
+      for (const {pattern, reason} of irrelevantPatterns) {
+        if (tag.includes(pattern)) {
+          isRelevant = false;
+          relevanceReason = reason;
+          break;
+        }
+      }
+    }
+    
+    // Cross-product contamination detection (using pre-computed flags)
+    if (isRelevant) {
+      if (toolsProducts && (tag.includes('rost') || tag.includes('effekt') || tag.includes('patina'))) {
+        isRelevant = false;
+        relevanceReason = 'paint effect terms not relevant for tools';
+      } else if (!paintProducts && !toolsProducts && (tag.includes('farb') || tag.includes('paint'))) {
+        if (!productTitleLower.includes('farb') && !productTitleLower.includes('paint')) {
+          isRelevant = false;
+          relevanceReason = 'paint terms not relevant for non-paint products';
+        }
+      }
+    }
+    
+    if (isRelevant) {
+      tagsAfterRelevanceCheck.push(tag);
+    } else {
+      pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Tags', tag, '', `Irrelevant tag removed: ${relevanceReason}`, 'info', ctx.phase);
+    }
+  }
+  tags = tagsAfterRelevanceCheck;
+
   // 3. Check banned terms
   const bannedTermsConfig = CFG.BANNED_TERMS || {};
   const bannedTermsMap = bannedTermsConfig.banned_terms || {};
@@ -1040,9 +1523,12 @@ function cleanupTags(row, issues, rowNumber, productTitle, ctx, CFG) {
     }
   }
 
-  for (const tag of tags) {
-    if (!categoryKeywords.has(tag)) {
-      pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Tags', tag, tag, `Tag '${tag}' does not align with product category '${productCategory}'`, 'warn', ctx.phase);
+  // Skip category alignment validation in Phase 3e since category may not be final yet
+  if (ctx.phase !== '3e') {
+    for (const tag of tags) {
+      if (!categoryKeywords.has(tag)) {
+        pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Tags', tag, tag, `Tag '${tag}' does not align with product category '${productCategory}'`, 'warn', ctx.phase);
+      }
     }
   }
 
@@ -1050,16 +1536,41 @@ function cleanupTags(row, issues, rowNumber, productTitle, ctx, CFG) {
   if (tags.length < 5) {
     const generatedTags = new Set(tags); // Start with existing valid tags
 
-    // NEW LOGIC: Extract keywords from title
+    // ENHANCED LOGIC: Smart keyword extraction from title with relevance scoring
     const titleWords = (row['Title'] || '').toLowerCase().split(/\s+/).filter(Boolean);
-    const stopWords = new Set(['und', 'der', 'die', 'das', 'ein', 'eine', 'eines', 'einen', 'einem', 'mit', 'von', 'zu', 'für', 'ist', 'sind', 'hat', 'haben', 'wird', 'werden', 'kann', 'können', 'auch', 'sich', 'als', 'ihr', 'ihre', 'sein', 'seine', 'wir', 'sie', 'es', 'ich', 'du', 'nicht', 'nur', 'schon', 'noch', 'sehr', 'hier', 'dort', 'jetzt', 'immer', 'artikel', 'produkt', 'packung', 'farbe', 'größe', 'material', 'stück', 'zubehör', 'neu', 'hochwertig', 'verschiedene', 'teilig']); // Removed 'set' and added 'teilig' as a stop word
+    const stopWords = new Set(['und', 'der', 'die', 'das', 'ein', 'eine', 'eines', 'einen', 'einem', 'mit', 'von', 'zu', 'für', 'ist', 'sind', 'hat', 'haben', 'wird', 'werden', 'kann', 'können', 'auch', 'sich', 'als', 'ihr', 'ihre', 'sein', 'seine', 'wir', 'sie', 'es', 'ich', 'du', 'nicht', 'nur', 'schon', 'noch', 'sehr', 'hier', 'dort', 'jetzt', 'immer', 'artikel', 'produkt', 'packung', 'größe', 'material', 'stück', 'zubehör', 'neu', 'hochwertig', 'verschiedene', 'teilig']);
 
+    // Priority scoring for title words based on product context
+    const priorityWords = [];
     for (const word of titleWords) {
       const cleanedWord = word.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9-]/g, '');
-      if (cleanedWord.length > 2 && cleanedWord.length <= 16 && !stopWords.has(cleanedWord) && !generatedTags.has(cleanedWord)) {
-        generatedTags.add(cleanedWord);
-        pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Tags', '', cleanedWord, `Tag inferred from product title: '${cleanedWord}'`, 'info', ctx.phase);
-        if (generatedTags.size >= MAX_TAGS) break; // Stop if we reach max tags
+      if (cleanedWord.length > 2 && cleanedWord.length <= 16 && !stopWords.has(cleanedWord)) {
+        let priority = 1;
+        
+        // Higher priority for core product terms
+        if (['pinsel', 'brush', 'farbe', 'paint', 'acryl', 'set'].includes(cleanedWord)) {
+          priority = 3;
+        }
+        // Medium priority for descriptive terms
+        else if (['spitzig', 'rund', 'flach', 'matt', 'metallic'].includes(cleanedWord)) {
+          priority = 2;
+        }
+        // Lower priority for brand names or compound fragments
+        else if (cleanedWord.includes('pentart') || cleanedWord.length > 12) {
+          priority = 0.5;
+        }
+        
+        priorityWords.push({word: cleanedWord, priority});
+      }
+    }
+    
+    // Sort by priority and add to tags
+    priorityWords.sort((a, b) => b.priority - a.priority);
+    for (const {word, priority} of priorityWords) {
+      if (!generatedTags.has(word)) {
+        generatedTags.add(word);
+        pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Tags', '', word, `Tag inferred from title (priority: ${priority}): '${word}'`, 'info', ctx.phase);
+        if (generatedTags.size >= MAX_TAGS) break;
       }
     }
 
@@ -1138,7 +1649,45 @@ function cleanupTags(row, issues, rowNumber, productTitle, ctx, CFG) {
     }
   }
 
-  // 6. Check tag count (warn if outside 5-10)
+  // 6. ENHANCED PHASE 1: Dynamic tag count optimization
+  if (tags.length > MAX_TAGS) {
+    // Smart tag reduction: prioritize relevant and core terms
+    const tagPriorities = tags.map(tag => {
+      let score = 1;
+      
+      // Higher priority for product-specific terms
+      if (productTitleLower.includes(tag) || tag === 'pinsel' || tag === 'farbe' || tag === 'set') {
+        score += 2;
+      }
+      
+      // Medium priority for category-aligned terms
+      if (productCategoryLower.includes(tag) || 
+          ['malen', 'basteln', 'kreativ', 'acryl'].includes(tag)) {
+        score += 1;
+      }
+      
+      // Lower priority for generic terms
+      if (['bastelbedarf', 'zubehor', 'material'].includes(tag)) {
+        score -= 1;
+      }
+      
+      // Very low priority for long or compound terms
+      if (tag.length > 12) {
+        score -= 2;
+      }
+      
+      return {tag, score};
+    });
+    
+    // Sort by score and keep top 8 tags
+    tagPriorities.sort((a, b) => b.score - a.score);
+    const optimizedTags = tagPriorities.slice(0, 8).map(item => item.tag);
+    
+    pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Tags', tags.join(','), optimizedTags.join(','), `Tag count optimized from ${tags.length} to ${optimizedTags.length} tags`, 'info', ctx.phase);
+    tags = optimizedTags;
+  }
+
+  // 7. Check tag count (warn if still outside 5-10)
   if (tags.length < 5 || tags.length > 10) {
     pushIssue(issues, rowNumber, row['Handle'], productTitle, 'Tags', tags.join(','), tags.join(','), `Tag count (${tags.length}) is outside the recommended range of 5-10`, 'warn', ctx.phase);
   }
@@ -1159,7 +1708,18 @@ function genSKU(vendor, title){
   return `${v}-${t}-${rnd}`;
 }
 
-/** Quick check that Config JSONs parse correctly and have expected keys */
+/** PHASE 2 PREPARATION: Function stubs for Phase 2 intelligence enhancement */
+function scoreAndAssignCategory(row, issues, rowNumber, productTitle, ctx, CFG) {
+  // Phase 1: Use existing logic, Phase 2: Add dynamic scoring
+  return mapCollectionsAndCategory(row, issues, rowNumber, productTitle, ctx, CFG);
+}
+
+function generateAndCleanTags(row, issues, rowNumber, productTitle, ctx, CFG) {
+  // Phase 1: Use existing logic, Phase 2: Add intelligent filtering
+  return cleanupTags(row, issues, rowNumber, productTitle, ctx, CFG);
+}
+
+/** Quick check that Config JSONs parse correctly and has expected keys */
 function testConfigLoad() {
   const ss = SpreadsheetApp.getActive();
   const cfgSheet = ss.getSheetByName('Config');
@@ -1167,13 +1727,22 @@ function testConfigLoad() {
   const cfg = loadConfig(cfgSheet); // uses your existing loadConfig()
 
   const report = [
-    `✅ Config loaded`,
+    `✅ PHASE 1 Config loaded successfully`,
     `- banned_terms: ${Object.keys(cfg.BANNED_TERMS || {}).length} entries`,
     `- category_alignment (categories): ${Object.keys(cfg.CAT_ALIGN || {}).length}`,
     `- keyword_dictionary (categories): ${Object.keys(cfg.KEYWORDS || {}).length}`,
     `- collection_aliases: ${Object.keys(cfg.COLLECTION_ALIASES || {}).length}`,
     `- sop_phase3_rules: ${Object.keys(cfg.SOP_RULES || {}).length}`,
-    `- known_vendors: ${Object.keys(cfg.KNOWN_VENDORS || {}).length}`
+    `- known_vendors: ${Object.keys(cfg.KNOWN_VENDORS || {}).length}`,
+    `- google_taxonomy_map: ${Object.keys(cfg.GOOGLE_TAX_MAP || {}).length} mappings`,
+    `- tag_relevance_map: ${cfg.TAG_RELEVANCE_MAP ? 'loaded' : 'missing'}`,
+    ``,
+    `🚀 PHASE 2 Preparation:`,
+    `- structural_tags: ${cfg.STRUCTURAL_TAGS ? Object.keys(cfg.STRUCTURAL_TAGS).length + ' categories' : 'missing'}`,
+    `- tag_generation_rules: ${cfg.TAG_GENERATION_RULES ? 'configured' : 'missing'}`,
+    ``,
+    `✅ Phase 1 Ready: Foundation stabilized`,
+    `✅ Phase 2 Ready: Intelligence infrastructure prepared`
   ].join('\n');
 
   Logger.log(report);
@@ -1214,7 +1783,21 @@ function setupSheetsAndConfig() {
     'sop_phase3_rules': '{}',
     'known_vendors_json': '{}',
     'seo_template_json': '{}',
-    'category_keywords_inference_json': '{}' // New key
+    'category_keywords_inference_json': '{}',
+    'google_taxonomy_map_json': '{}',
+    'tag_relevance_map_json': '{}',
+    // PHASE 2 PREPARATION: Config fields for intelligence enhancement
+    'structural_tags_json': JSON.stringify({
+      "seasonal": ["Father's Day", "Mother's Day", "Christmas", "Easter", "Valentine's Day"],
+      "marketing": ["Sale", "Neu", "Bestseller", "Limited Edition"],
+      "collections": ["für ihn", "für sie", "für kinder", "Weihnachten", "Ostern"]
+    }),
+    'tag_generation_rules_json': JSON.stringify({
+      "min_word_length": 3,
+      "min_occurrence": 1,
+      "source_fields": ["Title", "Body (HTML)", "Product Type"],
+      "blacklist_tags": ["from Lisa", "für dich", "von ihm", "hibiscus", "irrelevant"]
+    })
   };
 
   // Read existing keys from the Config sheet
@@ -1246,10 +1829,11 @@ function applyGoogleShopping(row, issues, rowNumber, productTitle, ctx, CFG) {
 
   if (!row[gsField] || String(row[gsField]).trim() === '') {
     const mapped = map[cat] || '';
+    
     if (mapped) {
-      // In validateOnly, just log suggestion; in full run, caller will assign
+      // Direct category mapping found
       pushIssue(issues, rowNumber, row['Handle'], productTitle, gsField, row[gsField] || '', mapped, 'Mapped via google_taxonomy_map', 'info', ctx.phase);
-      row[gsField] = mapped; // safe to set in both modes; Shopify ignores if not exported
+      row[gsField] = mapped;
       
       // Also update the Product Category field
       if (row[pcField] !== mapped) {
@@ -1257,7 +1841,50 @@ function applyGoogleShopping(row, issues, rowNumber, productTitle, ctx, CFG) {
         row[pcField] = mapped;
       }
     } else {
-      pushIssue(issues, rowNumber, row['Handle'], productTitle, gsField, '', '', 'Missing google category (no map entry for Product Category: ' + cat + ')', 'warn', ctx.phase);
+      // PHASE 1 ENHANCEMENT: Title-based fallback mapping for unmapped categories
+      const title = (row['Title'] || '').toLowerCase();
+      let fallbackMapping = '';
+      
+      // Office supplies keywords
+      if (title.includes('dreiflügel') || title.includes('mappe') || title.includes('ordner')) {
+        fallbackMapping = 'Business & Industrial > Office Supplies > Filing & Organization > Folders';
+      } else if (title.includes('heftschoner') || title.includes('schoner')) {
+        fallbackMapping = 'Business & Industrial > Office Supplies > Filing & Organization > Binding Supplies > Binder Accessories > Sheet Protectors';
+      } else if (title.includes('aufgabenheft') || title.includes('notenheft') || title.includes('heft')) {
+        fallbackMapping = 'Business & Industrial > Office Supplies > General Office Supplies > Paper Products > Notebooks & Notepads';
+      } else if (title.includes('bleistift') || title.includes('stift')) {
+        fallbackMapping = 'Business & Industrial > Office Supplies > Office Instruments > Writing & Drawing Instruments > Pens & Pencils > Pencils';
+      } else if (title.includes('filzstift') || title.includes('marker')) {
+        fallbackMapping = 'Business & Industrial > Office Supplies > Office Instruments > Writing & Drawing Instruments > Pens & Pencils > Pens > Felt-Tip Pens';
+      } else if (title.includes('radierer') || title.includes('gummi')) {
+        fallbackMapping = 'Business & Industrial > Office Supplies > General Office Supplies > Erasers';
+      } else if (title.includes('pinsel') || title.includes('brush')) {
+        fallbackMapping = 'Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Tools > Brushes';
+      } else if (title.includes('farbe') || title.includes('paint') || title.includes('acryl') || title.includes('wachspaste') || title.includes('paste')) {
+        fallbackMapping = 'Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Drawing & Painting Supplies > Paint';
+      } else if (title.includes('papier') || title.includes('paper') || title.includes('karton') || title.includes('chipboard')) {
+        fallbackMapping = 'Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Art & Craft Paper';
+      } else if (title.includes('metallic') || title.includes('chamäleon') || title.includes('chamleon') || title.includes('wachs')) {
+        fallbackMapping = 'Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Drawing & Painting Supplies > Paint';
+      } else if (title.includes('rost') || title.includes('patina') || title.includes('effekt')) {
+        fallbackMapping = 'Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Materials > Drawing & Painting Supplies > Paint';
+      } else if (title.includes('set') && (title.includes('pinsel') || title.includes('farb') || title.includes('brush'))) {
+        fallbackMapping = 'Arts & Entertainment > Hobbies & Creative Arts > Arts & Crafts > Art & Crafting Tools > Brushes';
+      }
+      
+      if (fallbackMapping) {
+        pushIssue(issues, rowNumber, row['Handle'], productTitle, gsField, row[gsField] || '', fallbackMapping, 'Mapped via title keyword detection', 'info', ctx.phase);
+        row[gsField] = fallbackMapping;
+        
+        // Update Product Category to match
+        if (row[pcField] !== fallbackMapping) {
+          pushIssue(issues, rowNumber, row['Handle'], productTitle, pcField, row[pcField] || '', fallbackMapping, 'Updated to match Google Product Category (title-based)', 'info', ctx.phase);
+          row[pcField] = fallbackMapping;
+        }
+      } else {
+        // No mapping found - provide detailed warning
+        pushIssue(issues, rowNumber, row['Handle'], productTitle, gsField, '', '', `Missing google category (no map entry for Product Category: "${cat}", title: "${row['Title'] || ''}")`, 'warn', ctx.phase);
+      }
     }
   }
 
@@ -1345,13 +1972,13 @@ function generateSummaryReport() {
     summarySheet.autoResizeColumns(1, 2);
     
     SpreadsheetApp.getUi().alert('📊 Summary Generated', 
-      `Summary report created!\\n\\n` +\
-      `• Products: ${stats.totalProducts}\\n` +\
-      `• Success rate: ${successRate}%\\n` +\
-      `• Issues: ${stats.totalIssues}\\n` +\
-      `• Bodies Preserved: ${stats.bodiesPreserved}\\n` +\
-      `• Bodies Augmented: ${stats.bodiesAugmented}\\n` +\
-      `• Bodies Regenerated: ${stats.bodiesRegenerated}\\n\\n` +\
+      `Summary report created!\n\n` +
+      `• Products: ${stats.totalProducts}\n` +
+      `• Success rate: ${successRate}%\n` +
+      `• Issues: ${stats.totalIssues}\n` +
+      `• Bodies Preserved: ${stats.bodiesPreserved}\n` +
+      `• Bodies Augmented: ${stats.bodiesAugmented}\n` +
+      `• Bodies Regenerated: ${stats.bodiesRegenerated}\n\n` +
       `Check the Summary sheet for details.`, SpreadsheetApp.getUi().ButtonSet.OK);
       
       
@@ -1436,4 +2063,187 @@ function populateCategoryKeywordsInference() {
   } else {
     Logger.log('Error: category_keywords_inference_json row not found. Please run setupSheetsAndConfig first.');
   }
+}
+
+function testSeoDescriptionFix() {
+  // Test the SEO description generation fix
+  const testRow = {
+    'Title': 'Spitzige Pinsel Set 6teilig',
+    'Product Category': 'Brushes & Tools',
+    'Vendor': '',
+    'Type': '',
+    'Tags': 'acrylfarben,bastelbedarf,bastelfarben,farben,lasur,malen,pinsel,set'
+  };
+  
+  const mockCFG = {
+    COLLECTION_ALIASES: {},
+    SOP_RULES: {},
+    KEYWORDS: {}
+  };
+  
+  const origTitle = 'Pinselset 6 teilig';
+  const origDesc = '6 Pinsel mit rundem Kopf, zum Malen und Zeichnen.';
+  const result = buildSEO(origTitle, origDesc, testRow['Title'], testRow['Product Category'], mockCFG, testRow);
+  
+  const report = [
+    '🧪 SEO Description Fix Test Results:',
+    '',
+    `📏 Length: ${result.seoDesc.length} chars (Min: 155, Max: 160)`,
+    `✅ Meets minimum: ${result.seoDesc.length >= 155 ? 'YES' : 'NO'}`,
+    `✅ Under maximum: ${result.seoDesc.length <= 160 ? 'YES' : 'NO'}`,
+    '',
+    '📝 Generated Description:',
+    `"${result.seoDesc}"`,
+    '',
+    '🎯 SEO Title:',
+    `"${result.seoTitle}"`,
+    '',
+    '🔧 Fix Status: ' + (result.seoDesc.length >= 155 && result.seoDesc.length <= 160 ? 'SUCCESS' : 'NEEDS MORE WORK')
+  ].join('\n');
+  
+  Logger.log(report);
+  SpreadsheetApp.getUi().alert('🧪 SEO Fix Test', report, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function validateConfigJsonSizes() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = ss.getSheetByName('Config');
+
+  if (!configSheet) {
+    SpreadsheetApp.getUi().alert('Error: Config sheet not found!');
+    return;
+  }
+
+  const data = configSheet.getDataRange().getValues();
+  const issues = [];
+  const MAX_CELL_SIZE = 50000; // Google Sheets cell limit
+
+  for (let i = 0; i < data.length; i++) {
+    const key = String(data[i][0] || '').trim();
+    const value = String(data[i][1] || '').trim();
+    
+    if (!key || !value) continue;
+    
+    const cellSize = value.length;
+    const isValidJson = (() => {
+      try { JSON.parse(value); return true; } catch { return false; }
+    })();
+    
+    if (cellSize > MAX_CELL_SIZE) {
+      issues.push(`❌ ${key}: ${cellSize} chars (EXCEEDS LIMIT)`);
+    } else if (cellSize > MAX_CELL_SIZE * 0.8) {
+      issues.push(`⚠️ ${key}: ${cellSize} chars (near limit)`);
+    } else if (!isValidJson) {
+      issues.push(`🔧 ${key}: Invalid JSON`);
+    } else {
+      issues.push(`✅ ${key}: ${cellSize} chars (OK)`);
+    }
+  }
+
+  const report = [
+    '📊 Config JSON Size Report',
+    `Limit: ${MAX_CELL_SIZE} chars per cell`,
+    '',
+    ...issues,
+    '',
+    `Total entries: ${issues.length}`
+  ].join('\n');
+
+  Logger.log(report);
+  SpreadsheetApp.getUi().alert('📊 Config Validation', report, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function syncLocalJsonToConfig() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = ss.getSheetByName('Config');
+
+  if (!configSheet) {
+    SpreadsheetApp.getUi().alert('Error: Config sheet not found!');
+    return;
+  }
+
+  SpreadsheetApp.getUi().alert('📋 Instructions', 
+    'This function will sync your local JSON files to the Config sheet.\n\n' +
+    'The JSON data is embedded in the function - you can modify it as needed.\n' +
+    'JSON will be MINIFIED (no formatting) for Google Sheets compatibility.\n\n' +
+    'Click OK to proceed with the sync.',
+    SpreadsheetApp.getUi().ButtonSet.OK);
+
+  // Local JSON data from your files - update this section when your JSON files change
+  const localJsonData = {
+    'banned_terms_json': {
+      "version": "2025-09-24",
+      "banned_terms": {
+        "hochwertig": "robust",
+        "beste Qualität": "langlebig", 
+        "Premium": "bewährt",
+        "unschlagbar": "praktisch",
+        "Top": "geeignet",
+        "einzigartig": "besonders"
+      },
+      "rules": {
+        "enforce_case_insensitive": true,
+        "apply_in": ["Title", "SEO Title", "SEO Description", "Body (HTML)"]
+      }
+    },
+    
+    'collection_aliases_json': {
+      "version": "2025-09-24",
+      "aliases": {
+        "grundmaterial_zum_korb_flechten": {
+          "normalized_product_type": "Flechten Grundmaterial",
+          "normalized_tags": ["Korbböden", "Peddigrohr"],
+          "notes": "Alias mappt Sammelbegriff auf zwei kanonische Tag-Eltern."
+        },
+        "schulbedarf": {
+          "normalized_product_type": "Schul- & Bürobedarf",
+          "normalized_tags": ["Schule", "Ablage", "Organisation"]
+        },
+        "kreativfarben_medien": {
+          "normalized_product_type": "Kreativfarben & Medien",
+          "normalized_tags": ["Farbe", "Medium", "DIY"]
+        },
+        "papier_formate": {
+          "normalized_product_type": "Papier & Formate", 
+          "normalized_tags": ["Papier", "Format", "Grammatur"]
+        },
+        "deko_wohnaccessoires": {
+          "normalized_product_type": "Dekoration & Wohnaccessoires",
+          "normalized_tags": ["Dekoration", "Ambiente", "Wohnraum"]
+        }
+      },
+      "rules": {
+        "type_priority": "normalized_product_type überschreibt abweichende Freitext-Typen.",
+        "tags_are_parent_only": "normalized_tags enthalten ausschließlich Parent-Werte (keine Attribute)."
+      }
+    }
+  };
+
+  const data = configSheet.getDataRange().getValues();
+  let updatedCount = 0;
+  let logDetails = [];
+
+  for (let i = 0; i < data.length; i++) {
+    const key = data[i][0].toString().trim();
+    
+    if (localJsonData[key]) {
+      // CRITICAL: Minify JSON for Google Sheets cell size limits
+      const jsonString = JSON.stringify(localJsonData[key]);
+      configSheet.getRange(i + 1, 2).setValue(jsonString);
+      updatedCount++;
+      logDetails.push(`✅ Updated: ${key} (${jsonString.length} chars, minified)`);
+      Logger.log(`Updated: ${key} - ${jsonString.length} chars (minified)`);
+    }
+  }
+
+  const summary = `🔄 Sync Complete!\n\n` +
+    `Updated ${updatedCount} config entries:\n` +
+    logDetails.join('\n') + '\n\n' +
+    `💡 To add more JSON files, edit the localJsonData object in the syncLocalJsonToConfig function.`;
+
+  Logger.log(summary);
+  SpreadsheetApp.getUi().alert('✅ Sync Complete', 
+    `Updated ${updatedCount} config entries from local JSON files.\n\n` +
+    `Check the Apps Script logs for details.`,
+    SpreadsheetApp.getUi().ButtonSet.OK);
 }
